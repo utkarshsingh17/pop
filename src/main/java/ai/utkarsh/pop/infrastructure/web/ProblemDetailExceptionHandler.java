@@ -3,6 +3,7 @@ package ai.utkarsh.pop.infrastructure.web;
 import ai.utkarsh.pop.domain.port.in.GetInvestigationUseCase.InvestigationNotFoundException;
 import ai.utkarsh.pop.domain.port.in.ManageServicesUseCase.ServiceAlreadyRegisteredException;
 import ai.utkarsh.pop.domain.port.in.ManageServicesUseCase.ServiceNotFoundException;
+import ai.utkarsh.pop.infrastructure.security.SecretCipher;
 import ai.utkarsh.pop.infrastructure.security.SecretKeyNotConfiguredException;
 import ai.utkarsh.pop.domain.port.out.DiagnosisEnginePort.DiagnosisFailedException;
 import ai.utkarsh.pop.infrastructure.investigator.postgres.UnsafeSqlException;
@@ -63,6 +64,21 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
         log.error("Refused to store a credential: {}", ex.getMessage());
         return problem(HttpStatus.SERVICE_UNAVAILABLE, "Secret Key Not Configured", ex.getMessage(),
                 "secret-key-not-configured", "SECRET_KEY_NOT_CONFIGURED", request.getRequestURI());
+    }
+
+    /**
+     * A stored credential that will not decrypt is almost always a changed key, not a bug — so
+     * say that, rather than returning the generic 500 this used to fall through to. The caller
+     * can act on it: re-register the service under the current key.
+     */
+    @ExceptionHandler(SecretCipher.GeneralSecurityRuntimeWrapper.class)
+    ProblemDetail handleUndecryptableSecret(SecretCipher.GeneralSecurityRuntimeWrapper ex,
+                                            HttpServletRequest request) {
+        log.error("Stored credential could not be decrypted at {}", request.getRequestURI(), ex);
+        return problem(HttpStatus.CONFLICT, "Stored Credential Unreadable",
+                ex.getMessage() + " Re-register the service with its password to store it "
+                        + "under the current key.",
+                "credential-unreadable", "CREDENTIAL_UNREADABLE", request.getRequestURI());
     }
 
     /**
