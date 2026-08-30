@@ -89,6 +89,23 @@ public class OpsMcpTools {
                 () -> toolkit.sweep(FindingSource.ACTUATOR));
     }
 
+    @McpTool(name = "sweep_logs",
+            annotations = @McpTool.McpAnnotations(
+                    readOnlyHint = true, destructiveHint = false,
+                    idempotentHint = true, openWorldHint = false),
+            description = "Read the tail of a registered service's log and report fatal errors, "
+                    + "the ERROR rate, and repeating exception types. The log outlives the "
+                    + "process, so this is the only source that can explain a crash after the "
+                    + "service has stopped answering.")
+    public String sweepLogs(
+            @McpToolParam(description = "Service to investigate, e.g. 'order-service'", required = true)
+            String service,
+            @McpToolParam(description = "Lookback window in minutes (default 60)", required = false)
+            Integer lookbackMinutes) {
+        return withEphemeralInvestigation(service, lookbackMinutes,
+                () -> toolkit.sweep(FindingSource.LOGS));
+    }
+
     @McpTool(name = "list_tables",
             annotations = @McpTool.McpAnnotations(
                     readOnlyHint = true, destructiveHint = false,

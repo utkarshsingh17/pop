@@ -140,6 +140,7 @@ thing.
 | `sweep_runtime` | the service's own actuator | what is wrong **now**: heap, metaspace, threads, GC, CPU, pool, descriptors, failing health components |
 | `sweep_metrics` | Prometheus | **when** it changed — p99, error rate, trends over a window |
 | `sweep_database` | the registered database | why a query is slow — scans, locks, bloat, plans |
+| `sweep_logs` | a file path, or the actuator logfile | **why it died** — fatal errors, ERROR rate, clustered exception types |
 
 Actuator is read directly from the process, so it needs no scrape config and is live the moment you
 register. It has no history, which is exactly what Prometheus is for; the system prompt tells the
@@ -177,8 +178,9 @@ The same capabilities are exposed over MCP, so an external agent can use pop's e
 `.mcp.json` points at `http://localhost:8080/mcp`; with the app running, ask Claude Code to
 *"sweep the database for order-service"*.
 
-Tools on both surfaces: `sweep_database`, `sweep_metrics`, `sweep_runtime`, `list_tables`,
-`describe_table`, `explain_query`, `suggest_indexes` (plus `evidence_so_far` in-process).
+Tools on both surfaces: `sweep_database`, `sweep_metrics`, `sweep_runtime`, `sweep_logs`,
+`list_tables`, `describe_table`, `explain_query`, `suggest_indexes` (plus `evidence_so_far`
+in-process).
 
 ---
 
@@ -204,6 +206,7 @@ would let real mapping drift pass. No test calls the Anthropic API.
 | `pop.target-datasource.max-pools` | `10` | registered databases held open at once |
 | `pop.security.secret-key` | — | base64 AES key; required to store a registered password |
 | `pop.security.allowed-target-hosts` | — | empty means any host but link-local/wildcard/multicast |
+| `pop.security.allowed-log-dirs` | — | empty refuses file log sources; a path is read off pop's own disk |
 | `pop.investigation.default-lookback` | `1h` | |
 | `pop.investigation.allow-explain-analyze` | `false` | EXPLAIN ANALYZE executes the query |
 | `spring.http.serviceclient.prometheus.base-url` | `localhost:9090` | |

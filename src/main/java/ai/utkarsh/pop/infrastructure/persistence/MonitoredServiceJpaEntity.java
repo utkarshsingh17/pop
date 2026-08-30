@@ -52,6 +52,13 @@ class MonitoredServiceJpaEntity {
     @Column(name = "actuator_base_url", length = 512)
     private String actuatorBaseUrl;
 
+    /** FILE or ACTUATOR — see {@code LogSource}; the two have different survival guarantees. */
+    @Column(name = "log_source_kind", length = 16)
+    private String logSourceKind;
+
+    @Column(name = "log_source_location", length = 512)
+    private String logSourceLocation;
+
     @Column(nullable = false)
     private boolean enabled;
 

@@ -43,7 +43,7 @@ class MonitoredServiceControllerTest {
     private static MonitoredService registered() {
         return MonitoredService.register(ServiceName.of("order-service"), null,
                 new DatabaseTarget("jdbc:postgresql://db:5432/shop", "pop_readonly", ""),
-                new ActuatorEndpoint("http://localhost:3001"), NOW);
+                new ActuatorEndpoint("http://localhost:3001"), null, NOW);
     }
 
     @Test

@@ -13,7 +13,51 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class TargetUriGuardTest {
 
     private static TargetUriGuard guardWith(String... allowedHosts) {
-        return new TargetUriGuard(new SecurityProperties(null, List.of(allowedHosts)));
+        return new TargetUriGuard(new SecurityProperties(null, List.of(allowedHosts), List.of()));
+    }
+
+    private static TargetUriGuard guardWithLogDirs(String... dirs) {
+        return new TargetUriGuard(new SecurityProperties(null, List.of(), List.of(dirs)));
+    }
+
+    @Test
+    void shouldRefuseFileLogSourcesWhenNoDirectoriesAreAllowed() {
+        // Fails closed: a path supplied over an API and read off pop's own disk is a
+        // local-file-inclusion surface, so it is refused until explicitly permitted.
+        assertThatThrownBy(() -> guardWithLogDirs().requireAllowedLogPath("/tmp/app.log"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("allowed-log-dirs is not");
+    }
+
+    @Test
+    void shouldAllowAPathUnderAnAllowedDirectory() {
+        assertThatCode(() -> guardWithLogDirs("/tmp").requireAllowedLogPath("/tmp/app.log"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldCanonicaliseTheAllowlistAsWellAsTheCandidate() {
+        // On macOS /tmp is a symlink to /private/tmp. Resolving only the candidate made an
+        // allowed directory of /tmp match nothing, which is how this was found.
+        assertThatCode(() -> guardWithLogDirs("/tmp").requireAllowedLogPath("/private/tmp/app.log"))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> guardWithLogDirs("/private/tmp").requireAllowedLogPath("/tmp/app.log"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldRejectTraversalOutOfAnAllowedDirectory() {
+        assertThatThrownBy(() -> guardWithLogDirs("/tmp")
+                .requireAllowedLogPath("/tmp/../etc/passwd"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not under any of");
+    }
+
+    @Test
+    void shouldRejectAPathOutsideEveryAllowedDirectory() {
+        assertThatThrownBy(() -> guardWithLogDirs("/tmp").requireAllowedLogPath("/etc/passwd"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not under any of");
     }
 
     @Test

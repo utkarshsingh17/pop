@@ -34,6 +34,7 @@ public interface ManageServicesUseCase {
      */
     record RegisterServiceCommand(String name,
                                   String url,
+                                  String logSource,
                                   String prometheusLabel,
                                   String jdbcUrl,
                                   String username,
@@ -41,6 +42,7 @@ public interface ManageServicesUseCase {
     }
 
     record UpdateServiceCommand(String url,
+                                String logSource,
                                 String prometheusLabel,
                                 String jdbcUrl,
                                 String username,

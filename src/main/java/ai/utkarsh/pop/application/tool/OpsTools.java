@@ -59,6 +59,17 @@ public class OpsTools {
         return toolkit.sweep(FindingSource.ACTUATOR);
     }
 
+    @Tool(name = "sweep_logs", description = """
+            Read the tail of the service's log and return what looks wrong: fatal errors such as
+            OutOfMemoryError, the rate of ERROR lines, and repeating exception types with counts.
+            Reach for this when a service is unreachable or has restarted — the log outlives the
+            process, so it is the only source that can still explain a crash after the metrics
+            have gone silent. Only works for services registered with a log source.
+            """)
+    public String sweepLogs() {
+        return toolkit.sweep(FindingSource.LOGS);
+    }
+
     @Tool(name = "list_tables", description = """
             List the tables in the database under investigation, largest first.
             Use this to orient yourself before describing or analysing a specific table.

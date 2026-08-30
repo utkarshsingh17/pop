@@ -87,7 +87,7 @@ class PopApplicationTests {
 		assertThat(investigators)
 				.extracting(InvestigatorPort::source)
 				.containsExactlyInAnyOrder(FindingSource.POSTGRES, FindingSource.PROMETHEUS,
-						FindingSource.ACTUATOR);
+						FindingSource.ACTUATOR, FindingSource.LOGS);
 	}
 
 	@Test

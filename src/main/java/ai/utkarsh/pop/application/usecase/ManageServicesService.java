@@ -2,6 +2,7 @@ package ai.utkarsh.pop.application.usecase;
 
 import ai.utkarsh.pop.domain.model.ActuatorEndpoint;
 import ai.utkarsh.pop.domain.model.DatabaseTarget;
+import ai.utkarsh.pop.domain.model.LogSource;
 import ai.utkarsh.pop.domain.model.MonitoredService;
 import ai.utkarsh.pop.domain.model.ServiceName;
 import ai.utkarsh.pop.domain.port.in.ManageServicesUseCase;
@@ -54,11 +55,12 @@ public class ManageServicesService implements ManageServicesUseCase {
                 command.jdbcUrl(), command.username(), command.password());
 
         MonitoredService service = MonitoredService.register(
-                name, command.prometheusLabel(), target, actuator, clock.instant());
+                name, command.prometheusLabel(), target, actuator,
+                logSourceOf(command.logSource()), clock.instant());
 
         repository.save(service);
-        log.info("Registered service '{}' (actuator: {}, database: {})",
-                name, service.hasActuator(), service.hasDatabase());
+        log.info("Registered service '{}' (actuator: {}, database: {}, logs: {})",
+                name, service.hasActuator(), service.hasDatabase(), service.hasLogSource());
         return redact(service);
     }
 
@@ -87,6 +89,9 @@ public class ManageServicesService implements ManageServicesUseCase {
 
         if (command.url() != null) {
             service.updateActuator(actuatorEndpointOf(command.url()), clock.instant());
+        }
+        if (command.logSource() != null) {
+            service.updateLogSource(logSourceOf(command.logSource()), clock.instant());
         }
         if (command.prometheusLabel() != null) {
             service.updatePrometheusLabel(command.prometheusLabel(), clock.instant());
@@ -184,6 +189,24 @@ public class ManageServicesService implements ManageServicesUseCase {
         return endpoint;
     }
 
+    /**
+     * A file path is vetted here, before anything opens it — reading off pop's own disk from a
+     * caller-chosen location is a local-file-inclusion surface, so registration is the checkpoint
+     * exactly as it is for hosts.
+     */
+    private LogSource logSourceOf(String location) {
+        if (location == null || location.isBlank()) {
+            return null;
+        }
+        LogSource source = LogSource.of(location);
+        if (source.kind() == LogSource.Kind.FILE) {
+            guard.requireAllowedLogPath(source.location());
+        } else {
+            guard.requireAllowedHttpUrl(source.location());
+        }
+        return source;
+    }
+
     /** Null URL means "no database registered"; a partial target is rejected by the domain. */
     private DatabaseTarget databaseTargetOf(String jdbcUrl, String username, String password) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
@@ -199,6 +222,7 @@ public class ManageServicesService implements ManageServicesUseCase {
                 service.prometheusLabel().orElse(null),
                 service.database().map(DatabaseTarget::redacted).orElse(null),
                 service.actuator().orElse(null),
+                service.logSource().orElse(null),
                 service.enabled(),
                 service.registeredAt(),
                 service.updatedAt());

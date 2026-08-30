@@ -16,5 +16,11 @@ public enum FindingSource {
      * a point-in-time reading taken directly from the process, whereas Prometheus holds history.
      * A finding from here says what is true now; one from there says when it changed.
      */
-    ACTUATOR
+    ACTUATOR,
+
+    /**
+     * The service's log output. The only source that outlives the process it describes, which
+     * makes it the one that can still explain a crash after everything else has gone silent.
+     */
+    LOGS
 }
