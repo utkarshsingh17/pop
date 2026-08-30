@@ -1,5 +1,6 @@
 package ai.utkarsh.pop.infrastructure.persistence;
 
+import ai.utkarsh.pop.domain.model.ActuatorEndpoint;
 import ai.utkarsh.pop.domain.model.DatabaseTarget;
 import ai.utkarsh.pop.domain.model.MonitoredService;
 import ai.utkarsh.pop.domain.model.ServiceName;
@@ -37,6 +38,7 @@ class MonitoredServiceJpaAdapter implements MonitoredServiceRepository {
                 .orElseGet(() -> new MonitoredServiceJpaEntity(service.name().value()));
 
         entity.setPrometheusLabel(service.prometheusLabel().orElse(null));
+        entity.setActuatorBaseUrl(service.actuator().map(ActuatorEndpoint::baseUrl).orElse(null));
         entity.setEnabled(service.enabled());
         entity.setRegisteredAt(service.registeredAt());
         entity.setUpdatedAt(service.updatedAt());
@@ -98,6 +100,7 @@ class MonitoredServiceJpaAdapter implements MonitoredServiceRepository {
                 ServiceName.of(entity.getName()),
                 entity.getPrometheusLabel(),
                 target,
+                entity.getActuatorBaseUrl() == null ? null : new ActuatorEndpoint(entity.getActuatorBaseUrl()),
                 entity.isEnabled(),
                 entity.getRegisteredAt(),
                 entity.getUpdatedAt());

@@ -1,5 +1,6 @@
 package ai.utkarsh.pop.application.usecase;
 
+import ai.utkarsh.pop.domain.model.ActuatorEndpoint;
 import ai.utkarsh.pop.domain.model.DatabaseTarget;
 import ai.utkarsh.pop.domain.model.MonitoredService;
 import ai.utkarsh.pop.domain.model.ServiceName;
@@ -42,7 +43,9 @@ public class ManageServicesService implements ManageServicesUseCase {
 
     @Override
     public MonitoredService register(RegisterServiceCommand command) {
-        ServiceName name = ServiceName.of(command.name());
+        ActuatorEndpoint actuator = actuatorEndpointOf(command.url());
+        ServiceName name = resolveName(command.name(), actuator);
+
         if (repository.existsByName(name)) {
             throw new ServiceAlreadyRegisteredException(name);
         }
@@ -51,11 +54,28 @@ public class ManageServicesService implements ManageServicesUseCase {
                 command.jdbcUrl(), command.username(), command.password());
 
         MonitoredService service = MonitoredService.register(
-                name, command.prometheusLabel(), target, clock.instant());
+                name, command.prometheusLabel(), target, actuator, clock.instant());
 
         repository.save(service);
-        log.info("Registered service '{}' (database configured: {})", name, service.hasDatabase());
+        log.info("Registered service '{}' (actuator: {}, database: {})",
+                name, service.hasActuator(), service.hasDatabase());
         return redact(service);
+    }
+
+    /**
+     * A URL alone is enough to register. Deriving the name from host and port means the common
+     * case is a single field, and the name stays predictable enough to pass back in when starting
+     * an investigation.
+     */
+    private static ServiceName resolveName(String explicitName, ActuatorEndpoint actuator) {
+        if (explicitName != null && !explicitName.isBlank()) {
+            return ServiceName.of(explicitName);
+        }
+        if (actuator == null) {
+            throw new IllegalArgumentException(
+                    "Provide either a name or a url — a registration needs at least one of them");
+        }
+        return ServiceName.of(actuator.deriveServiceName());
     }
 
     @Override
@@ -63,6 +83,9 @@ public class ManageServicesService implements ManageServicesUseCase {
         MonitoredService service = repository.findByName(name)
                 .orElseThrow(() -> new ServiceNotFoundException(name));
 
+        if (command.url() != null) {
+            service.updateActuator(actuatorEndpointOf(command.url()), clock.instant());
+        }
         if (command.prometheusLabel() != null) {
             service.updatePrometheusLabel(command.prometheusLabel(), clock.instant());
         }
@@ -125,10 +148,16 @@ public class ManageServicesService implements ManageServicesUseCase {
                     "Service '" + name + "' is disabled, so sweeps fall back to the statically "
                             + "configured target. Re-enable it to use its registered database.");
         }
-        if (!service.hasDatabase()) {
+        if (!service.hasDatabase() && !service.hasActuator()) {
             return new ProbeResult(false,
-                    "No database is registered for '" + name + "', so sweeps fall back to "
-                            + "the statically configured target.");
+                    "Neither an actuator URL nor a database is registered for '" + name
+                            + "', so only Prometheus can be swept.");
+        }
+        if (!service.hasDatabase()) {
+            return new ProbeResult(true,
+                    "Actuator registered at " + service.actuator().orElseThrow()
+                            + ". No database registered, so database sweeps fall back to the "
+                            + "statically configured target.");
         }
         try {
             JdbcTemplate template = registry.jdbcFor(name);
@@ -138,6 +167,19 @@ public class ManageServicesService implements ManageServicesUseCase {
             log.warn("Probe failed for service '{}': {}", name, e.getMessage());
             return new ProbeResult(false, "Could not query the registered database: " + e.getMessage());
         }
+    }
+
+    /**
+     * Vets the host before the endpoint is ever stored, so pop is never holding an address it
+     * would refuse to fetch. Normalisation (appending {@code /actuator}) happens in the domain.
+     */
+    private ActuatorEndpoint actuatorEndpointOf(String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        ActuatorEndpoint endpoint = new ActuatorEndpoint(url);
+        guard.requireAllowedHttpUrl(endpoint.baseUrl());
+        return endpoint;
     }
 
     /** Null URL means "no database registered"; a partial target is rejected by the domain. */
@@ -154,6 +196,7 @@ public class ManageServicesService implements ManageServicesUseCase {
                 service.name(),
                 service.prometheusLabel().orElse(null),
                 service.database().map(DatabaseTarget::redacted).orElse(null),
+                service.actuator().orElse(null),
                 service.enabled(),
                 service.registeredAt(),
                 service.updatedAt());

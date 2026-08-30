@@ -28,14 +28,20 @@ public interface ManageServicesUseCase {
      */
     ProbeResult probe(ServiceName name);
 
+    /**
+     * @param name may be null when {@code url} is given — the service name is then derived from
+     *             the URL's host and port, so registering is a one-field call.
+     */
     record RegisterServiceCommand(String name,
+                                  String url,
                                   String prometheusLabel,
                                   String jdbcUrl,
                                   String username,
                                   String password) {
     }
 
-    record UpdateServiceCommand(String prometheusLabel,
+    record UpdateServiceCommand(String url,
+                                String prometheusLabel,
                                 String jdbcUrl,
                                 String username,
                                 String password,

@@ -14,6 +14,7 @@ import java.util.Optional;
  * <p>Each optional field enables one investigator:
  * <ul>
  *   <li>{@code database} present → the Postgres investigator sweeps <em>that</em> database</li>
+ *   <li>{@code actuator} present → the Actuator investigator reads the running JVM directly</li>
  *   <li>{@code prometheusLabel} → the value matched against the {@code service} label in PromQL</li>
  * </ul>
  *
@@ -27,36 +28,47 @@ public final class MonitoredService {
 
     private String prometheusLabel;
     private DatabaseTarget database;
+    private ActuatorEndpoint actuator;
     private boolean enabled;
     private Instant updatedAt;
 
     private MonitoredService(ServiceName name, String prometheusLabel, DatabaseTarget database,
-                             boolean enabled, Instant registeredAt, Instant updatedAt) {
+                             ActuatorEndpoint actuator, boolean enabled,
+                             Instant registeredAt, Instant updatedAt) {
         this.name = name;
         this.prometheusLabel = prometheusLabel;
         this.database = database;
+        this.actuator = actuator;
         this.enabled = enabled;
         this.registeredAt = registeredAt;
         this.updatedAt = updatedAt;
     }
 
-    /** Registers a new service. {@code prometheusLabel} and {@code database} may both be null. */
+    /** Registers a new service. Every source is optional; a bare name is a legal registration. */
     public static MonitoredService register(ServiceName name, String prometheusLabel,
-                                            DatabaseTarget database, Instant now) {
+                                            DatabaseTarget database, ActuatorEndpoint actuator,
+                                            Instant now) {
         Objects.requireNonNull(name, "name must not be null");
         Objects.requireNonNull(now, "now must not be null");
-        return new MonitoredService(name, normaliseLabel(prometheusLabel), database, true, now, now);
+        return new MonitoredService(name, normaliseLabel(prometheusLabel), database, actuator,
+                true, now, now);
     }
 
     /** Rehydrates from storage. Only persistence adapters should call this. */
     public static MonitoredService rehydrate(ServiceName name, String prometheusLabel,
-                                             DatabaseTarget database, boolean enabled,
-                                             Instant registeredAt, Instant updatedAt) {
-        return new MonitoredService(name, prometheusLabel, database, enabled, registeredAt, updatedAt);
+                                             DatabaseTarget database, ActuatorEndpoint actuator,
+                                             boolean enabled, Instant registeredAt, Instant updatedAt) {
+        return new MonitoredService(name, prometheusLabel, database, actuator, enabled,
+                registeredAt, updatedAt);
     }
 
     public void updateDatabase(DatabaseTarget target, Instant now) {
         this.database = target;
+        this.updatedAt = now;
+    }
+
+    public void updateActuator(ActuatorEndpoint endpoint, Instant now) {
+        this.actuator = endpoint;
         this.updatedAt = now;
     }
 
@@ -87,6 +99,10 @@ public final class MonitoredService {
         return database != null;
     }
 
+    public boolean hasActuator() {
+        return actuator != null;
+    }
+
     public ServiceName name() {
         return name;
     }
@@ -97,6 +113,10 @@ public final class MonitoredService {
 
     public Optional<DatabaseTarget> database() {
         return Optional.ofNullable(database);
+    }
+
+    public Optional<ActuatorEndpoint> actuator() {
+        return Optional.ofNullable(actuator);
     }
 
     public boolean enabled() {
@@ -127,7 +147,7 @@ public final class MonitoredService {
 
     @Override
     public String toString() {
-        return "MonitoredService[name=%s, prometheusLabel=%s, database=%s, enabled=%s]"
-                .formatted(name, prometheusLabel, database, enabled);
+        return "MonitoredService[name=%s, prometheusLabel=%s, database=%s, actuator=%s, enabled=%s]"
+                .formatted(name, prometheusLabel, database, actuator, enabled);
     }
 }

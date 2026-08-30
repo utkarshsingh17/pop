@@ -46,6 +46,19 @@ public class OpsTools {
         return toolkit.sweep(FindingSource.PROMETHEUS);
     }
 
+    @Tool(name = "sweep_runtime", description = """
+            Read the service's own Spring Boot Actuator directly and return what looks wrong right
+            now: health and failing components, JVM heap and metaspace, blocked and live threads,
+            GC pause time, CPU, mean request latency, connection pool and file descriptors.
+            Each result carries a concrete next check.
+            Use this for 'is it healthy right now' and for internal JVM state. It reads the live
+            process, so it has no history — use sweep_metrics to find out when something changed.
+            Only works for services registered with a URL.
+            """)
+    public String sweepRuntime() {
+        return toolkit.sweep(FindingSource.ACTUATOR);
+    }
+
     @Tool(name = "list_tables", description = """
             List the tables in the database under investigation, largest first.
             Use this to orient yourself before describing or analysing a specific table.

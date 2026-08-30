@@ -48,6 +48,10 @@ class MonitoredServiceJpaEntity {
     @Column(name = "db_password", columnDefinition = "text")
     private String dbPassword;
 
+    /** Normalised actuator base, e.g. {@code http://host:3001/actuator}. */
+    @Column(name = "actuator_base_url", length = 512)
+    private String actuatorBaseUrl;
+
     @Column(nullable = false)
     private boolean enabled;
 

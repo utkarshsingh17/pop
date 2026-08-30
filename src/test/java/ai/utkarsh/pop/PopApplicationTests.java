@@ -83,10 +83,11 @@ class PopApplicationTests {
 	}
 
 	@Test
-	void bothInvestigatorsShouldBeRegistered() {
+	void everyInvestigatorShouldBeRegistered() {
 		assertThat(investigators)
 				.extracting(InvestigatorPort::source)
-				.containsExactlyInAnyOrder(FindingSource.POSTGRES, FindingSource.PROMETHEUS);
+				.containsExactlyInAnyOrder(FindingSource.POSTGRES, FindingSource.PROMETHEUS,
+						FindingSource.ACTUATOR);
 	}
 
 	@Test
