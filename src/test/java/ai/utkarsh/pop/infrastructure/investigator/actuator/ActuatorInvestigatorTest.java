@@ -57,7 +57,7 @@ class ActuatorInvestigatorTest {
     }
 
     private void registerWithActuator() {
-        when(services.findByName(SERVICE)).thenReturn(Optional.of(
+        when(services.findByNameWithoutSecrets(SERVICE)).thenReturn(Optional.of(
                 MonitoredService.register(SERVICE, null, null, ENDPOINT, NOW)));
     }
 
@@ -76,7 +76,7 @@ class ActuatorInvestigatorTest {
 
     @Test
     void shouldProduceNothingForAServiceWithNoActuatorRegistered() {
-        when(services.findByName(SERVICE)).thenReturn(Optional.of(
+        when(services.findByNameWithoutSecrets(SERVICE)).thenReturn(Optional.of(
                 MonitoredService.register(SERVICE, null, null, null, NOW)));
 
         // No endpoint is not an error — there is simply nothing to ask.
@@ -85,7 +85,7 @@ class ActuatorInvestigatorTest {
 
     @Test
     void shouldProduceNothingForAnUnregisteredService() {
-        when(services.findByName(SERVICE)).thenReturn(Optional.empty());
+        when(services.findByNameWithoutSecrets(SERVICE)).thenReturn(Optional.empty());
 
         assertThat(investigate()).isEmpty();
     }
@@ -150,8 +150,34 @@ class ActuatorInvestigatorTest {
     }
 
     @Test
-    void shouldDegradeAFailedCheckToInfoRatherThanAbort() {
+    void shouldCollapseATotallyUnreachableServiceIntoOneCriticalFinding() {
+        // The bug this covers: a dead service used to produce ten INFO findings, which cannot
+        // outrank a HIGH from the database - so the agent confidently blamed a missing index
+        // while the service was not running at all.
+        when(client.health(any())).thenThrow(new RuntimeException("Connection refused"));
+        when(client.metric(any(), any(), any())).thenThrow(new RuntimeException("Connection refused"));
+
+        assertThat(investigate()).singleElement().satisfies(f -> {
+            assertThat(f.severity()).isEqualTo(Severity.CRITICAL);
+            assertThat(f.title()).contains("unreachable");
+            assertThat(f.detail()).contains("log file outlives the process");
+        });
+    }
+
+    @Test
+    void shouldNotCallItUnreachableWhenOnlyHealthIsSlow() {
+        // A JVM thrashing in GC can time out on /health and still serve a metric a moment later.
+        when(client.health(any())).thenThrow(new RuntimeException("Read timed out"));
         when(client.metric(any(), eq("jvm.memory.used"), eq("area:heap")))
+                .thenReturn(Optional.of(gauge(10)));
+
+        assertThat(investigate()).noneSatisfy(f -> assertThat(f.title()).contains("unreachable"));
+    }
+
+    @Test
+    void shouldDegradeAFailedCheckToInfoRatherThanAbort() {
+        // Health succeeds, so this is a single unavailable check rather than a dead service.
+        when(client.metric(any(), eq("jvm.threads.states"), eq("state:blocked")))
                 .thenThrow(new RuntimeException("connection refused"));
 
         assertThat(investigate())

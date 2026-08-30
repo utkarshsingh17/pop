@@ -82,7 +82,7 @@ public class ManageServicesService implements ManageServicesUseCase {
     public MonitoredService update(ServiceName name, UpdateServiceCommand command) {
         // Deliberately the non-decrypting read: changing a URL or a label must not depend on
         // being able to decrypt a password it never touches.
-        MonitoredService service = repository.findByNameForEditing(name)
+        MonitoredService service = repository.findByNameWithoutSecrets(name)
                 .orElseThrow(() -> new ServiceNotFoundException(name));
 
         if (command.url() != null) {

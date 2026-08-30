@@ -118,7 +118,7 @@ class MonitoredServiceJpaAdapterTest extends AbstractPostgresIntegrationTest {
         String before = jdbc.queryForObject(
                 "SELECT db_password FROM monitored_services WHERE name = ?", String.class, NAME.value());
 
-        MonitoredService editing = adapter.findByNameForEditing(NAME).orElseThrow();
+        MonitoredService editing = adapter.findByNameWithoutSecrets(NAME).orElseThrow();
         editing.updateActuator(new ActuatorEndpoint("http://elsewhere:9000"), NOW.plusSeconds(60));
         adapter.save(editing);
         entityManager.flush();
@@ -131,10 +131,10 @@ class MonitoredServiceJpaAdapterTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
-    void findByNameForEditingShouldNotDecrypt() {
+    void findByNameWithoutSecretsShouldNotDecrypt() {
         adapter.save(withDatabase());
 
-        assertThat(adapter.findByNameForEditing(NAME).orElseThrow()
+        assertThat(adapter.findByNameWithoutSecrets(NAME).orElseThrow()
                 .database().orElseThrow().password()).isEmpty();
     }
 
