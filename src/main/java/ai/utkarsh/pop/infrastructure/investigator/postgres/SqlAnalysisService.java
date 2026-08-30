@@ -1,9 +1,9 @@
 package ai.utkarsh.pop.infrastructure.investigator.postgres;
 
+import ai.utkarsh.pop.application.tool.InvestigationContext;
 import ai.utkarsh.pop.infrastructure.config.InvestigationProperties;
-import ai.utkarsh.pop.infrastructure.config.TargetDataSourceConfig;
+import ai.utkarsh.pop.infrastructure.config.TargetDatabaseResolver;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -23,16 +23,32 @@ import java.util.Locale;
 @Service
 public class SqlAnalysisService {
 
-    private final JdbcTemplate jdbc;
+    private final TargetDatabaseResolver targets;
+    private final InvestigationContext context;
     private final SqlSafetyGuard guard;
     private final InvestigationProperties properties;
 
-    SqlAnalysisService(@Qualifier(TargetDataSourceConfig.TARGET_JDBC_TEMPLATE) JdbcTemplate jdbc,
+    SqlAnalysisService(TargetDatabaseResolver targets,
+                       InvestigationContext context,
                        SqlSafetyGuard guard,
                        InvestigationProperties properties) {
-        this.jdbc = jdbc;
+        this.targets = targets;
+        this.context = context;
         this.guard = guard;
         this.properties = properties;
+    }
+
+    /**
+     * The database for the investigation currently bound to this thread.
+     *
+     * <p>Resolved per call rather than injected once, because which database these queries
+     * belong to now depends on the service being investigated. The tools that reach this class
+     * are singleton beans invoked by the model with only the arguments it chose, so the service
+     * comes from the thread binding for the same reason findings do — the model has no way to
+     * name an investigation, and should not be trusted to.
+     */
+    private JdbcTemplate jdbc() {
+        return targets.jdbcFor(context.require().service());
     }
 
     /**
@@ -53,12 +69,13 @@ public class SqlAnalysisService {
         // If the caller already wrote EXPLAIN, don't stack another one on top.
         String statement = safe.toUpperCase(Locale.ROOT).startsWith("EXPLAIN") ? safe : prefix + safe;
 
-        List<String> lines = jdbc.queryForList(statement, String.class);
+        List<String> lines = jdbc().queryForList(statement, String.class);
         return String.join("\n", lines);
     }
 
     /** Indexes currently defined on a table, with their usage counts. */
     public List<IndexInfo> indexesOf(String table) {
+        String name = requireIdentifier(table);
         String sql = """
                 SELECT i.indexrelname                AS index_name,
                        i.idx_scan                    AS scans,
@@ -68,15 +85,16 @@ public class SqlAnalysisService {
                 WHERE i.relname = ?
                 ORDER BY i.idx_scan DESC
                 """;
-        return jdbc.query(sql, (rs, rowNum) -> new IndexInfo(
+        return jdbc().query(sql, (rs, rowNum) -> new IndexInfo(
                 rs.getString("index_name"),
                 rs.getLong("scans"),
                 rs.getString("size"),
-                rs.getString("definition")), requireIdentifier(table));
+                rs.getString("definition")), name);
     }
 
     /** Column names, types and estimated distinct counts — the inputs to index selection. */
     public List<ColumnInfo> columnsOf(String table) {
+        String name = requireIdentifier(table);
         String sql = """
                 SELECT a.attname                                        AS column_name,
                        format_type(a.atttypid, a.atttypmod)             AS data_type,
@@ -90,15 +108,16 @@ public class SqlAnalysisService {
                   AND NOT a.attisdropped
                 ORDER BY a.attnum
                 """;
-        return jdbc.query(sql, (rs, rowNum) -> new ColumnInfo(
+        return jdbc().query(sql, (rs, rowNum) -> new ColumnInfo(
                 rs.getString("column_name"),
                 rs.getString("data_type"),
                 rs.getDouble("n_distinct"),
-                rs.getBoolean("not_null")), requireIdentifier(table));
+                rs.getBoolean("not_null")), name);
     }
 
     /** Row-count estimate and on-disk size. */
     public TableInfo tableInfo(String table) {
+        String name = requireIdentifier(table);
         String sql = """
                 SELECT c.relname                                        AS table_name,
                        c.reltuples::bigint                              AS estimated_rows,
@@ -110,12 +129,12 @@ public class SqlAnalysisService {
                 WHERE c.relname = ?
                   AND c.relkind = 'r'
                 """;
-        List<TableInfo> results = jdbc.query(sql, (rs, rowNum) -> new TableInfo(
+        List<TableInfo> results = jdbc().query(sql, (rs, rowNum) -> new TableInfo(
                 rs.getString("table_name"),
                 rs.getLong("estimated_rows"),
                 rs.getString("total_size"),
                 rs.getLong("seq_scan"),
-                rs.getLong("idx_scan")), requireIdentifier(table));
+                rs.getLong("idx_scan")), name);
 
         if (results.isEmpty()) {
             throw new IllegalArgumentException("No such table: " + table);
@@ -125,7 +144,7 @@ public class SqlAnalysisService {
 
     /** Tables in the public schema, so the agent can orient itself without guessing names. */
     public List<String> listTables() {
-        return jdbc.queryForList("""
+        return jdbc().queryForList("""
                 SELECT relname
                 FROM pg_stat_user_tables
                 ORDER BY n_live_tup DESC
@@ -183,6 +202,9 @@ public class SqlAnalysisService {
      * Table and index names cannot be bound as parameters, so they are validated as plain
      * identifiers before being used anywhere near a statement.
      *
+     * <p>Callers hoist this above the database lookup deliberately: Java evaluates the receiver
+     * before the arguments, so validating inline would resolve (and possibly open) a connection
+     * pool for a name that was never going to be accepted.
      */
     private static String requireIdentifier(String identifier) {
         if (identifier == null || !identifier.matches("[A-Za-z_][A-Za-z0-9_$]{0,62}")) {

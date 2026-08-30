@@ -5,6 +5,8 @@ import ai.utkarsh.pop.domain.model.FindingSource;
 import ai.utkarsh.pop.domain.model.ServiceName;
 import ai.utkarsh.pop.domain.model.Severity;
 import ai.utkarsh.pop.domain.model.TimeRange;
+import ai.utkarsh.pop.application.tool.InvestigationContext;
+import ai.utkarsh.pop.domain.model.Investigation;
 import ai.utkarsh.pop.infrastructure.config.InvestigationProperties;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterAll;
@@ -48,6 +50,7 @@ class PostgresInvestigatorIntegrationTest {
     private static JdbcTemplate jdbc;
     private static PostgresInvestigator investigator;
     private static SqlAnalysisService analysis;
+    private static InvestigationContext context;
 
     @BeforeAll
     static void startDatabase() {
@@ -65,8 +68,11 @@ class PostgresInvestigatorIntegrationTest {
         seedSlowScenario();
 
         Clock clock = Clock.fixed(Instant.parse("2026-08-22T10:00:00Z"), ZoneOffset.UTC);
-        investigator = new PostgresInvestigator(jdbc, clock);
-        analysis = new SqlAnalysisService(jdbc, new SqlSafetyGuard(),
+        context = new InvestigationContext();
+        // The resolver seam: this test pins every service to the one container it started,
+        // which is exactly what the registry does for an unregistered service.
+        investigator = new PostgresInvestigator(service -> jdbc, clock);
+        analysis = new SqlAnalysisService(service -> jdbc, context, new SqlSafetyGuard(),
                 new InvestigationProperties(Duration.ofHours(1), false));
     }
 
@@ -173,7 +179,9 @@ class PostgresInvestigatorIntegrationTest {
         broken.setConnectionTimeout(1_000);
         broken.setInitializationFailTimeout(-1);
 
-        PostgresInvestigator failing = new PostgresInvestigator(new JdbcTemplate(broken), Clock.systemUTC());
+        JdbcTemplate brokenTemplate = new JdbcTemplate(broken);
+        PostgresInvestigator failing =
+                new PostgresInvestigator(service -> brokenTemplate, Clock.systemUTC());
         List<Finding> findings = failing.investigate(SERVICE, TimeRange.lastly(Duration.ofHours(1), Instant.now()));
 
         assertThat(findings)
@@ -185,28 +193,39 @@ class PostgresInvestigatorIntegrationTest {
 
     @Test
     void explain_shouldReturnAPlanShowingTheSequentialScan() {
-        String plan = analysis.explain("SELECT count(*) FROM orders WHERE customer_id = 42");
+        // SqlAnalysisService resolves its database from the investigation bound to the thread,
+        // so the call has to run inside one — the same path the agent's tools take.
+        String plan = withInvestigation(
+                () -> analysis.explain("SELECT count(*) FROM orders WHERE customer_id = 42"));
 
         assertThat(plan).containsIgnoringCase("Seq Scan on orders");
     }
 
+    /** Binds an investigation for calls that resolve their target from the thread. */
+    private static <T> T withInvestigation(java.util.function.Supplier<T> action) {
+        Investigation investigation = Investigation.open(
+                "why is it slow?", SERVICE,
+                TimeRange.lastly(Duration.ofHours(1), Instant.now()), Instant.now());
+        return context.runWithin(investigation, action);
+    }
 
     @Test
     void explain_shouldRejectAWriteStatement() {
-        assertThatThrownBy(() -> analysis.explain("DELETE FROM orders"))
+        assertThatThrownBy(() -> withInvestigation(() -> analysis.explain("DELETE FROM orders")))
                 .isInstanceOf(UnsafeSqlException.class);
     }
 
     @Test
     void explain_shouldRejectExplainAnalyzeWhenDisabled() {
-        assertThatThrownBy(() -> analysis.explain("EXPLAIN ANALYZE SELECT * FROM orders"))
+        assertThatThrownBy(() -> withInvestigation(
+                () -> analysis.explain("EXPLAIN ANALYZE SELECT * FROM orders")))
                 .isInstanceOf(UnsafeSqlException.class)
                 .hasMessageContaining("executes the statement");
     }
 
     @Test
     void tableInfo_shouldReportRowsAndScanCounts() {
-        SqlAnalysisService.TableInfo info = analysis.tableInfo("orders");
+        SqlAnalysisService.TableInfo info = withInvestigation(() -> analysis.tableInfo("orders"));
 
         assertThat(info.name()).isEqualTo("orders");
         assertThat(info.estimatedRows()).isGreaterThan(50_000);
@@ -215,25 +234,25 @@ class PostgresInvestigatorIntegrationTest {
 
     @Test
     void tableInfo_shouldRejectNonIdentifierInput() {
-        assertThatThrownBy(() -> analysis.tableInfo("orders; DROP TABLE orders"))
+        assertThatThrownBy(() -> withInvestigation(() -> analysis.tableInfo("orders; DROP TABLE orders")))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void tableInfo_whenTableMissing_shouldThrow() {
-        assertThatThrownBy(() -> analysis.tableInfo("no_such_table"))
+        assertThatThrownBy(() -> withInvestigation(() -> analysis.tableInfo("no_such_table")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("No such table");
     }
 
     @Test
     void listTables_shouldIncludeSeededTable() {
-        assertThat(analysis.listTables()).contains("orders");
+        assertThat(withInvestigation(() -> analysis.listTables())).contains("orders");
     }
 
     @Test
     void indexesOf_shouldReportThePrimaryKeyOnly() {
-        List<SqlAnalysisService.IndexInfo> indexes = analysis.indexesOf("orders");
+        List<SqlAnalysisService.IndexInfo> indexes = withInvestigation(() -> analysis.indexesOf("orders"));
 
         assertThat(indexes).hasSize(1);
         assertThat(indexes.getFirst().definition()).contains("(id)");
@@ -241,7 +260,7 @@ class PostgresInvestigatorIntegrationTest {
 
     @Test
     void suggestIndexes_shouldProposeTheMissingForeignKeyIndex() {
-        List<String> suggestions = analysis.suggestIndexes("orders");
+        List<String> suggestions = withInvestigation(() -> analysis.suggestIndexes("orders"));
 
         assertThat(suggestions)
                 .anySatisfy(s -> assertThat(s).contains("customer_id").contains("CREATE INDEX"));
@@ -249,7 +268,7 @@ class PostgresInvestigatorIntegrationTest {
 
     @Test
     void columnsOf_shouldDescribeEveryColumn() {
-        List<SqlAnalysisService.ColumnInfo> columns = analysis.columnsOf("orders");
+        List<SqlAnalysisService.ColumnInfo> columns = withInvestigation(() -> analysis.columnsOf("orders"));
 
         assertThat(columns).extracting(SqlAnalysisService.ColumnInfo::name)
                 .containsExactly("id", "customer_id", "status", "total_cents", "created_at");

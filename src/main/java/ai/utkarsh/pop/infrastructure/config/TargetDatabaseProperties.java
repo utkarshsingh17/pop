@@ -15,6 +15,9 @@ import java.time.Duration;
  * @param statementTimeout ceiling applied to every statement pop runs against the target, so a
  *                         pathological query the agent chooses cannot pin a production backend
  * @param maxRows          cap on rows returned into the model's context
+ * @param maxPools         how many registered services may hold an open pool at once. Pools are
+ *                         opened lazily per service and the least recently used is closed when
+ *                         this is exceeded, so a large registry cannot exhaust local resources.
  */
 @Validated
 @ConfigurationProperties(prefix = "pop.target-datasource")
@@ -23,5 +26,6 @@ public record TargetDatabaseProperties(
         @NotBlank String username,
         String password,
         @DefaultValue("5s") Duration statementTimeout,
-        @DefaultValue("200") @Positive int maxRows) {
+        @DefaultValue("200") @Positive int maxRows,
+        @DefaultValue("10") @Positive int maxPools) {
 }

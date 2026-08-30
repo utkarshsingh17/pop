@@ -1,6 +1,9 @@
 package ai.utkarsh.pop.infrastructure.web;
 
 import ai.utkarsh.pop.domain.port.in.GetInvestigationUseCase.InvestigationNotFoundException;
+import ai.utkarsh.pop.domain.port.in.ManageServicesUseCase.ServiceAlreadyRegisteredException;
+import ai.utkarsh.pop.domain.port.in.ManageServicesUseCase.ServiceNotFoundException;
+import ai.utkarsh.pop.infrastructure.security.SecretKeyNotConfiguredException;
 import ai.utkarsh.pop.domain.port.out.DiagnosisEnginePort.DiagnosisFailedException;
 import ai.utkarsh.pop.infrastructure.investigator.postgres.UnsafeSqlException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -37,6 +40,29 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
     ProblemDetail handleNotFound(InvestigationNotFoundException ex, HttpServletRequest request) {
         return problem(HttpStatus.NOT_FOUND, "Investigation Not Found", ex.getMessage(),
                 "investigation-not-found", "INVESTIGATION_NOT_FOUND", request.getRequestURI());
+    }
+
+    @ExceptionHandler(ServiceNotFoundException.class)
+    ProblemDetail handleServiceNotFound(ServiceNotFoundException ex, HttpServletRequest request) {
+        return problem(HttpStatus.NOT_FOUND, "Service Not Registered", ex.getMessage(),
+                "service-not-found", "SERVICE_NOT_FOUND", request.getRequestURI());
+    }
+
+    @ExceptionHandler(ServiceAlreadyRegisteredException.class)
+    ProblemDetail handleServiceConflict(ServiceAlreadyRegisteredException ex, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, "Service Already Registered", ex.getMessage(),
+                "service-already-registered", "SERVICE_ALREADY_REGISTERED", request.getRequestURI());
+    }
+
+    /**
+     * Refusing to store a credential we cannot encrypt is a deployment fault, not the caller's
+     * mistake — hence 503 with an actionable message rather than a 4xx.
+     */
+    @ExceptionHandler(SecretKeyNotConfiguredException.class)
+    ProblemDetail handleMissingSecretKey(SecretKeyNotConfiguredException ex, HttpServletRequest request) {
+        log.error("Refused to store a credential: {}", ex.getMessage());
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "Secret Key Not Configured", ex.getMessage(),
+                "secret-key-not-configured", "SECRET_KEY_NOT_CONFIGURED", request.getRequestURI());
     }
 
     /**
