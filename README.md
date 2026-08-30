@@ -8,8 +8,9 @@ a database and a metrics backend, and it decides what evidence to gather — swe
 latency, sweep the database, spot a sequential scan, pull the execution plan, check the indexes,
 then conclude. The evidence trail is recorded alongside the answer.
 
-Built on Spring Boot 4.1 / Spring AI 2.0 / Java 21, with Claude (`claude-opus-5`) as the reasoning
-engine.
+Built on Spring Boot 4.1 / Spring AI 2.0 / Java 21, with OpenAI (`gpt-4o` by default) as the
+reasoning engine. The provider is isolated to one dependency and the `spring.ai.*` config — no
+application code imports a provider-specific type, so swapping it is a pom change.
 
 ---
 
@@ -62,11 +63,11 @@ pop never writes to the system it observes. Index suggestions are proposals for 
 
 ## Running it
 
-Requires Docker, JDK 21, and an Anthropic API key.
+Requires Docker, JDK 21, and an OpenAI API key.
 
 ```bash
 docker compose up -d          # Postgres (+ pg_stat_statements) and Prometheus
-export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
 ./mvnw spring-boot:run
 ```
 
@@ -193,14 +194,14 @@ in-process).
 
 Pure-Java domain tests run in ~0.1s with no Spring context. Anything touching Postgres uses
 Testcontainers rather than H2, because the schema is Postgres-specific and an in-memory substitute
-would let real mapping drift pass. No test calls the Anthropic API.
+would let real mapping drift pass. No test calls the model API.
 
 ## Configuration
 
 | Property | Default | |
 |---|---|---|
-| `spring.ai.anthropic.api-key` | — | required |
-| `spring.ai.anthropic.chat.model` | `claude-opus-5` | |
+| `spring.ai.openai.api-key` | — | required, from `OPENAI_API_KEY` |
+| `spring.ai.openai.chat.model` | `gpt-4o` | override with `OPENAI_MODEL` |
 | `pop.target-datasource.*` | `localhost:5432/shop` | the observed database |
 | `pop.target-datasource.statement-timeout` | `5s` | ceiling on every statement pop runs |
 | `pop.target-datasource.max-pools` | `10` | registered databases held open at once |
