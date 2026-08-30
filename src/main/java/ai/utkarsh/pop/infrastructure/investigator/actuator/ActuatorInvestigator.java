@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.DoubleFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Driven adapter: reads the running JVM of a registered service through Spring Boot Actuator.
@@ -56,7 +57,7 @@ public class ActuatorInvestigator implements InvestigatorPort {
 
     @Override
     public List<Finding> investigate(ServiceName service, TimeRange range) {
-        Optional<ActuatorEndpoint> endpoint = services.findByName(service)
+        Optional<ActuatorEndpoint> endpoint = services.findByNameWithoutSecrets(service)
                 .filter(MonitoredService::enabled)
                 .flatMap(MonitoredService::actuator);
 
@@ -68,11 +69,65 @@ public class ActuatorInvestigator implements InvestigatorPort {
         ActuatorEndpoint actuator = endpoint.get();
         List<Finding> findings = new ArrayList<>();
 
+        // A service that answers nothing at all is the headline, not a footnote. Confirm it with
+        // one cheap second call and stop: the remaining checks would each pay a full connect
+        // timeout to learn the same thing, and would bury the fact under ten INFO findings that
+        // cannot outrank a HIGH from another source.
+        Optional<Finding> unreachable = detectUnreachable(actuator);
+        if (unreachable.isPresent()) {
+            return List.of(unreachable.get());
+        }
+
         health(actuator).ifPresent(findings::add);
         for (Check check : checks()) {
             evaluate(actuator, check).ifPresent(findings::add);
         }
         return findings;
+    }
+
+    /**
+     * Distinguishes "nothing at this address answers" from "this one metric is not exposed".
+     *
+     * <p>Those are the same code path but very different facts. A service without a connection
+     * pool legitimately has no {@code hikaricp} metrics and that is not a problem; a service whose
+     * every endpoint refuses the connection has died, and that outranks anything the database has
+     * to say.
+     *
+     * <p>Two probes rather than one, because a single slow response is not death: a JVM thrashing
+     * in GC can time out on {@code /health} and still serve a metric a moment later.
+     */
+    private Optional<Finding> detectUnreachable(ActuatorEndpoint endpoint) {
+        String firstError = probeFailure(() -> client.health(endpoint));
+        if (firstError == null) {
+            return Optional.empty();
+        }
+        String secondError = probeFailure(() -> client.metric(endpoint, "jvm.memory.used", "area:heap"));
+        if (secondError == null) {
+            return Optional.empty();
+        }
+
+        log.warn("Actuator at {} is unreachable: {}", endpoint.baseUrl(), secondError);
+        return Optional.of(Finding.of(FindingSource.ACTUATOR, Severity.CRITICAL,
+                "Service is unreachable at " + endpoint.baseUrl(),
+                "Nothing answered at this address, so no runtime evidence could be gathered at "
+                        + "all — treat every JVM check as unknown rather than healthy. A service "
+                        + "that stops answering its own actuator has usually died or is wedged "
+                        + "(an OutOfMemoryError and GC thrash both look like this). "
+                        + "Check: whether the process is alive, and read its log for a fatal "
+                        + "error — the log file outlives the process, this endpoint does not.",
+                clock.instant(),
+                Finding.evidenceOf("check", "reachability", "endpoint", endpoint.baseUrl(),
+                        "error", secondError)));
+    }
+
+    /** @return the failure message, or null when the call succeeded */
+    private static String probeFailure(Supplier<?> call) {
+        try {
+            call.get();
+            return null;
+        } catch (RuntimeException e) {
+            return String.valueOf(e.getMessage());
+        }
     }
 
     /**

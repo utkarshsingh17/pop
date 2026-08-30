@@ -71,7 +71,7 @@ class MonitoredServiceJpaAdapter implements MonitoredServiceRepository {
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<MonitoredService> findByNameForEditing(ServiceName name) {
+    public Optional<MonitoredService> findByNameWithoutSecrets(ServiceName name) {
         return repository.findById(name.value()).map(entity -> toDomain(entity, false));
     }
 
