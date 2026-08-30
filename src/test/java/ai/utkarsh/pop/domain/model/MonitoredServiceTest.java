@@ -16,7 +16,7 @@ class MonitoredServiceTest {
 
     @Test
     void shouldFallBackToTheServiceNameAsThePrometheusLabel() {
-        MonitoredService service = MonitoredService.register(NAME, null, null, null, NOW);
+        MonitoredService service = MonitoredService.register(NAME, null, null, null, null, NOW);
 
         assertThat(service.effectivePrometheusLabel()).isEqualTo("order-service");
         assertThat(service.prometheusLabel()).isEmpty();
@@ -24,7 +24,7 @@ class MonitoredServiceTest {
 
     @Test
     void shouldRegisterWithoutADatabase() {
-        MonitoredService service = MonitoredService.register(NAME, null, null, null, NOW);
+        MonitoredService service = MonitoredService.register(NAME, null, null, null, null, NOW);
 
         assertThat(service.hasDatabase()).isFalse();
         assertThat(service.enabled()).isTrue();
@@ -32,14 +32,14 @@ class MonitoredServiceTest {
 
     @Test
     void shouldRejectAPrometheusLabelThatCouldInjectPromql() {
-        assertThatThrownBy(() -> MonitoredService.register(NAME, "svc\"} or up{", null, null, NOW))
+        assertThatThrownBy(() -> MonitoredService.register(NAME, "svc\"} or up{", null, null, null, NOW))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("prometheus label");
     }
 
     @Test
     void shouldTrackUpdateTime() {
-        MonitoredService service = MonitoredService.register(NAME, null, null, null, NOW);
+        MonitoredService service = MonitoredService.register(NAME, null, null, null, null, NOW);
         Instant later = NOW.plusSeconds(60);
 
         service.updateDatabase(TARGET, later);
@@ -51,7 +51,7 @@ class MonitoredServiceTest {
 
     @Test
     void disableShouldStopItBeingInvestigated() {
-        MonitoredService service = MonitoredService.register(NAME, null, TARGET, null, NOW);
+        MonitoredService service = MonitoredService.register(NAME, null, TARGET, null, null, NOW);
 
         service.disable(NOW.plusSeconds(1));
 

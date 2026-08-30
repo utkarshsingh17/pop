@@ -41,7 +41,7 @@ class MonitoredServiceController {
     ResponseEntity<ServiceResponse> register(@Valid @RequestBody RegisterServiceRequest request,
                                              UriComponentsBuilder uriBuilder) {
         var service = manageServices.register(new ManageServicesUseCase.RegisterServiceCommand(
-                request.name(), request.url(), request.prometheusLabel(),
+                request.name(), request.url(), request.logSource(), request.prometheusLabel(),
                 request.jdbcUrl(), request.username(), request.password()));
 
         URI location = uriBuilder.path("/api/v1/services/{name}")
@@ -67,7 +67,7 @@ class MonitoredServiceController {
         return ServiceResponse.from(manageServices.update(
                 ServiceName.of(name),
                 new ManageServicesUseCase.UpdateServiceCommand(
-                        request.url(), request.prometheusLabel(), request.jdbcUrl(),
+                        request.url(), request.logSource(), request.prometheusLabel(), request.jdbcUrl(),
                         request.username(), request.password(), request.enabled())));
     }
 

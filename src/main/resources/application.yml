@@ -93,6 +93,9 @@ pop:
     secret-key: ${POP_SECRET_KEY:}
     # Empty means any host except link-local, wildcard and multicast. List hosts to narrow it.
     allowed-target-hosts: ${POP_ALLOWED_TARGET_HOSTS:}
+    # Directories a registered file log source may live under. Empty refuses file log sources
+    # outright: a path supplied over the API is read off pop's own disk, so it fails closed.
+    allowed-log-dirs: ${POP_ALLOWED_LOG_DIRS:}
 
   investigation:
     default-lookback: 1h

@@ -58,7 +58,7 @@ class ActuatorInvestigatorTest {
 
     private void registerWithActuator() {
         when(services.findByNameWithoutSecrets(SERVICE)).thenReturn(Optional.of(
-                MonitoredService.register(SERVICE, null, null, ENDPOINT, NOW)));
+                MonitoredService.register(SERVICE, null, null, ENDPOINT, null, NOW)));
     }
 
     private static ActuatorMetric gauge(double value) {
@@ -77,7 +77,7 @@ class ActuatorInvestigatorTest {
     @Test
     void shouldProduceNothingForAServiceWithNoActuatorRegistered() {
         when(services.findByNameWithoutSecrets(SERVICE)).thenReturn(Optional.of(
-                MonitoredService.register(SERVICE, null, null, null, NOW)));
+                MonitoredService.register(SERVICE, null, null, null, null, NOW)));
 
         // No endpoint is not an error — there is simply nothing to ask.
         assertThat(investigate()).isEmpty();

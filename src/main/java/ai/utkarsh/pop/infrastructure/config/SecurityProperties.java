@@ -15,11 +15,16 @@ import java.util.List;
  * @param allowedTargetHosts when non-empty, the only hosts a registration may point at. Empty
  *                           means any host except the always-blocked ranges (link-local,
  *                           wildcard, multicast).
+ * @param allowedLogDirs     directories a file log source may live under. Empty refuses file log
+ *                           sources outright: a path supplied over an API and read off pop's own
+ *                           disk is a local-file-inclusion surface, so it fails closed the same
+ *                           way an unset secret key does.
  */
 @ConfigurationProperties(prefix = "pop.security")
 public record SecurityProperties(
         String secretKey,
-        @DefaultValue("") List<String> allowedTargetHosts) {
+        @DefaultValue("") List<String> allowedTargetHosts,
+        @DefaultValue("") List<String> allowedLogDirs) {
 
     public boolean hasSecretKey() {
         return secretKey != null && !secretKey.isBlank();

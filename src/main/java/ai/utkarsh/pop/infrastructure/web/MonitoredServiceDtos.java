@@ -25,6 +25,7 @@ final class MonitoredServiceDtos {
     record RegisterServiceRequest(
             @Size(max = 128) String name,
             @Size(max = 512) String url,
+            @Size(max = 512) String logSource,
             @Size(max = 128) String prometheusLabel,
             @Size(max = 512) String jdbcUrl,
             @Size(max = 128) String username,
@@ -34,6 +35,7 @@ final class MonitoredServiceDtos {
     /** Every field optional — absent means "leave as it is". */
     record UpdateServiceRequest(
             @Size(max = 512) String url,
+            @Size(max = 512) String logSource,
             @Size(max = 128) String prometheusLabel,
             @Size(max = 512) String jdbcUrl,
             @Size(max = 128) String username,
@@ -51,6 +53,7 @@ final class MonitoredServiceDtos {
     record ServiceResponse(
             String name,
             String actuatorUrl,
+            String logSource,
             String prometheusLabel,
             DatabaseResponse database,
             boolean enabled,
@@ -61,6 +64,7 @@ final class MonitoredServiceDtos {
             return new ServiceResponse(
                     service.name().value(),
                     service.actuator().map(a -> a.baseUrl()).orElse(null),
+                    service.logSource().map(Object::toString).orElse(null),
                     service.effectivePrometheusLabel(),
                     service.database().map(DatabaseResponse::from).orElse(null),
                     service.enabled(),

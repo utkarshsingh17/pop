@@ -15,7 +15,7 @@ class SecretCipherTest {
             .encodeToString("0123456789abcdef0123456789abcdef".getBytes());
 
     private static SecretCipher cipherWith(String key) {
-        return new SecretCipher(new SecurityProperties(key, List.of()));
+        return new SecretCipher(new SecurityProperties(key, List.of(), List.of()));
     }
 
     @Test

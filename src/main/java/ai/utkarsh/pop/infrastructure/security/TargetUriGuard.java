@@ -4,9 +4,11 @@ import ai.utkarsh.pop.infrastructure.config.SecurityProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 
@@ -31,12 +33,52 @@ import java.util.Locale;
 public class TargetUriGuard {
 
     private final List<String> allowedHosts;
+    private final List<Path> allowedLogDirs;
 
     TargetUriGuard(SecurityProperties properties) {
         this.allowedHosts = properties.allowedTargetHosts().stream()
                 .filter(host -> !host.isBlank())
                 .map(host -> host.trim().toLowerCase(Locale.ROOT))
                 .toList();
+        // Canonicalised on both sides or the comparison is meaningless: on macOS /tmp is a
+        // symlink to /private/tmp, so resolving only the candidate would make an allowed
+        // directory of /tmp match nothing at all.
+        this.allowedLogDirs = properties.allowedLogDirs().stream()
+                .filter(dir -> !dir.isBlank())
+                .map(dir -> canonical(Path.of(dir.trim())))
+                .toList();
+    }
+
+    /**
+     * Vets a log file path before pop opens it.
+     *
+     * <p>This one reads off pop's <em>own</em> disk from a location the caller chose, which is a
+     * local-file-inclusion surface: unchecked, {@code /etc/passwd} or a private key is as readable
+     * as a log. So it fails closed — with no {@code pop.security.allowed-log-dirs} configured,
+     * every file source is refused — and the path is resolved and normalised before the
+     * comparison, so {@code ../} cannot walk out of an allowed directory.
+     *
+     * @throws IllegalArgumentException if the path is outside every allowed directory
+     */
+    public void requireAllowedLogPath(String path) {
+        if (allowedLogDirs.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "File log sources are refused because pop.security.allowed-log-dirs is not "
+                            + "configured. Set it to the directories pop may read logs from.");
+        }
+
+        Path resolved;
+        try {
+            resolved = canonical(Path.of(path));
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Not a usable log file path: " + path);
+        }
+
+        boolean permitted = allowedLogDirs.stream().anyMatch(resolved::startsWith);
+        if (!permitted) {
+            throw new IllegalArgumentException(
+                    "Log path '" + resolved + "' is not under any of pop.security.allowed-log-dirs");
+        }
     }
 
     /** @throws IllegalArgumentException if the URL is malformed or the host is not permitted */
@@ -96,6 +138,29 @@ public class TargetUriGuard {
                         "Host '" + host + "' resolves to a wildcard or multicast address, "
                                 + "which is not permitted");
             }
+        }
+    }
+
+    /**
+     * Absolute, normalised, and symlink-resolved where the path exists — so {@code ../} cannot
+     * walk out of an allowed directory and a symlink cannot point out of one either.
+     */
+    private static Path canonical(Path path) {
+        Path absolute = path.toAbsolutePath().normalize();
+        try {
+            if (absolute.toFile().exists()) {
+                return absolute.toRealPath();
+            }
+            // A log file that does not exist yet still has to be comparable, so canonicalise the
+            // directory it will live in. Normalisation above already collapsed any ../, so this
+            // cannot be used to escape an allowed directory.
+            Path parent = absolute.getParent();
+            if (parent != null && parent.toFile().exists()) {
+                return parent.toRealPath().resolve(absolute.getFileName());
+            }
+            return absolute;
+        } catch (IOException e) {
+            return absolute;
         }
     }
 
