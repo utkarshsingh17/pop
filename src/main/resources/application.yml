@@ -2,6 +2,13 @@ spring:
   application:
     name: pop
 
+  # Boot starts compose.yaml at startup and waits for the Postgres healthcheck before
+  # Flyway runs. start-only leaves the containers up when the app stops, so a restart
+  # does not pay for a fresh container.
+  docker:
+    compose:
+      lifecycle-management: start-only
+
   # Platform's own database — Flyway-managed, read/write.
   datasource:
     # Port 55432 matches compose.yaml, which avoids 5432 so a locally installed

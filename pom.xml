@@ -96,6 +96,15 @@
 			<scope>runtime</scope>
 		</dependency>
 
+		<!-- Dev-time only: starts compose.yaml on boot and waits for the Postgres
+		     healthcheck before Flyway runs. Optional so it does not leak transitively;
+		     disable in a deployed environment with spring.docker.compose.enabled=false. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-docker-compose</artifactId>
+			<optional>true</optional>
+		</dependency>
+
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
