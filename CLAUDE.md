@@ -152,13 +152,15 @@ would bypass the advice.
 Errors are RFC 9457 Problem Details (`ProblemDetailExceptionHandler`). Flyway owns the schema
 (`ddl-auto: validate`); add migrations under `src/main/resources/db/migration`.
 
-## Model provider drift
+## Model provider
 
-`README.md` describes Anthropic / `claude-opus-5`, but the code is wired to OpenAI: `pom.xml` pulls
-`spring-ai-starter-model-openai`, and `application.yml` reads `spring.ai.openai.api-key` from
-`OPENAI_API_KEY` with `OPENAI_MODEL` defaulting to `gpt-4o`. Trust the config, not the README.
+OpenAI: `pom.xml` pulls `spring-ai-starter-model-openai`, and `application.yml` reads
+`spring.ai.openai.api-key` from `OPENAI_API_KEY` with `OPENAI_MODEL` defaulting to `gpt-4o`.
+
 Switching providers should stay confined to that one dependency and the `spring.ai.*` block — no
-application code imports a provider-specific type, and it should stay that way.
+application code imports a provider-specific type, and it should stay that way. If you change it,
+change `README.md` in the same commit: the two disagreed for a long time, and a reader following
+the README exported the wrong environment variable and got a context that would not start.
 
 ## Conventions
 

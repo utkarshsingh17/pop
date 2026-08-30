@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Boots the whole application to prove the wiring holds: both datasources, Flyway, the HTTP
  * interface client group, the resilience proxies, the agent's tools and the MCP server.
  *
- * <p>No network calls to Anthropic happen — the key is a placeholder and nothing invokes the
+ * <p>No network calls to the model provider happen — the key is a placeholder and nothing invokes the
  * chat client. This is a wiring test, not a model test.
  */
 @SpringBootTest
