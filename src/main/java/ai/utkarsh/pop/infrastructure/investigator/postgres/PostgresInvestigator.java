@@ -6,9 +6,8 @@ import ai.utkarsh.pop.domain.model.ServiceName;
 import ai.utkarsh.pop.domain.model.Severity;
 import ai.utkarsh.pop.domain.model.TimeRange;
 import ai.utkarsh.pop.domain.port.out.InvestigatorPort;
-import ai.utkarsh.pop.infrastructure.config.TargetDataSourceConfig;
+import ai.utkarsh.pop.infrastructure.config.TargetDatabaseResolver;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -42,12 +41,11 @@ public class PostgresInvestigator implements InvestigatorPort {
     /** Dead-tuple fraction above which autovacuum is plainly not keeping up. */
     private static final double DEAD_TUPLE_RATIO = 0.20;
 
-    private final JdbcTemplate jdbc;
+    private final TargetDatabaseResolver targets;
     private final Clock clock;
 
-    PostgresInvestigator(@Qualifier(TargetDataSourceConfig.TARGET_JDBC_TEMPLATE) JdbcTemplate jdbc,
-                         Clock clock) {
-        this.jdbc = jdbc;
+    PostgresInvestigator(TargetDatabaseResolver targets, Clock clock) {
+        this.targets = targets;
         this.clock = clock;
     }
 
@@ -59,12 +57,15 @@ public class PostgresInvestigator implements InvestigatorPort {
     @Override
     public List<Finding> investigate(ServiceName service, TimeRange range) {
         List<Finding> findings = new ArrayList<>();
-        findings.addAll(safely("slow queries", this::slowQueries));
-        findings.addAll(safely("connection saturation", this::connectionSaturation));
-        findings.addAll(safely("lock waits", this::lockWaits));
-        findings.addAll(safely("idle transactions", this::idleInTransaction));
-        findings.addAll(safely("sequential scans", this::sequentialScans));
-        findings.addAll(safely("table bloat", this::tableBloat));
+        // Resolved once per sweep rather than held as a field: which database this investigator
+        // talks to now depends on which service is being investigated.
+        JdbcTemplate jdbc = targets.jdbcFor(service);
+        findings.addAll(safely("slow queries", () -> slowQueries(jdbc)));
+        findings.addAll(safely("connection saturation", () -> connectionSaturation(jdbc)));
+        findings.addAll(safely("lock waits", () -> lockWaits(jdbc)));
+        findings.addAll(safely("idle transactions", () -> idleInTransaction(jdbc)));
+        findings.addAll(safely("sequential scans", () -> sequentialScans(jdbc)));
+        findings.addAll(safely("table bloat", () -> tableBloat(jdbc)));
         return findings;
     }
 
@@ -87,7 +88,7 @@ public class PostgresInvestigator implements InvestigatorPort {
         }
     }
 
-    private List<Finding> slowQueries() {
+    private List<Finding> slowQueries(JdbcTemplate jdbc) {
         String sql = """
                 SELECT query,
                        calls,
@@ -118,7 +119,7 @@ public class PostgresInvestigator implements InvestigatorPort {
         }, SLOW_QUERY_MEAN_MS);
     }
 
-    private List<Finding> connectionSaturation() {
+    private List<Finding> connectionSaturation(JdbcTemplate jdbc) {
         String sql = """
                 SELECT (SELECT count(*) FROM pg_stat_activity)                              AS used,
                        (SELECT setting::int FROM pg_settings WHERE name = 'max_connections') AS max
@@ -140,7 +141,7 @@ public class PostgresInvestigator implements InvestigatorPort {
         }).stream().filter(java.util.Objects::nonNull).toList();
     }
 
-    private List<Finding> lockWaits() {
+    private List<Finding> lockWaits(JdbcTemplate jdbc) {
         String sql = """
                 SELECT blocked.pid                                    AS blocked_pid,
                        blocked.query                                  AS blocked_query,
@@ -169,7 +170,7 @@ public class PostgresInvestigator implements InvestigatorPort {
         });
     }
 
-    private List<Finding> idleInTransaction() {
+    private List<Finding> idleInTransaction(JdbcTemplate jdbc) {
         String sql = """
                 SELECT pid,
                        query,
@@ -193,7 +194,7 @@ public class PostgresInvestigator implements InvestigatorPort {
     }
 
     /** Sequential scans over large tables — the signature of a missing index. */
-    private List<Finding> sequentialScans() {
+    private List<Finding> sequentialScans(JdbcTemplate jdbc) {
         String sql = """
                 SELECT relname,
                        seq_scan,
@@ -228,7 +229,7 @@ public class PostgresInvestigator implements InvestigatorPort {
         }, SEQ_SCAN_MIN_ROWS);
     }
 
-    private List<Finding> tableBloat() {
+    private List<Finding> tableBloat(JdbcTemplate jdbc) {
         String sql = """
                 SELECT relname,
                        n_live_tup,
