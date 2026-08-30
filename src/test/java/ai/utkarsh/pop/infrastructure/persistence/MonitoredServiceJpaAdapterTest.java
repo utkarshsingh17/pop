@@ -110,6 +110,35 @@ class MonitoredServiceJpaAdapterTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void editingWithoutThePasswordShouldPreserveTheStoredCiphertext() {
+        // The bug this covers: PATCHing a URL used to re-encrypt the password, so an unrelated
+        // edit failed outright once the key had changed.
+        adapter.save(withDatabase());
+        entityManager.flush();
+        String before = jdbc.queryForObject(
+                "SELECT db_password FROM monitored_services WHERE name = ?", String.class, NAME.value());
+
+        MonitoredService editing = adapter.findByNameForEditing(NAME).orElseThrow();
+        editing.updateActuator(new ActuatorEndpoint("http://elsewhere:9000"), NOW.plusSeconds(60));
+        adapter.save(editing);
+        entityManager.flush();
+
+        String after = jdbc.queryForObject(
+                "SELECT db_password FROM monitored_services WHERE name = ?", String.class, NAME.value());
+        assertThat(after).isEqualTo(before);
+        assertThat(adapter.findByName(NAME).orElseThrow().database().orElseThrow().password())
+                .isEqualTo("hunter2");
+    }
+
+    @Test
+    void findByNameForEditingShouldNotDecrypt() {
+        adapter.save(withDatabase());
+
+        assertThat(adapter.findByNameForEditing(NAME).orElseThrow()
+                .database().orElseThrow().password()).isEmpty();
+    }
+
+    @Test
     void shouldDeleteAndReportWhetherAnythingWasThere() {
         adapter.save(withDatabase());
 

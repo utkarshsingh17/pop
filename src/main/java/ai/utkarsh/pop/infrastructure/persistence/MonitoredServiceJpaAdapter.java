@@ -46,7 +46,13 @@ class MonitoredServiceJpaAdapter implements MonitoredServiceRepository {
         service.database().ifPresentOrElse(target -> {
             entity.setDbUrl(target.jdbcUrl());
             entity.setDbUsername(target.username());
-            entity.setDbPassword(cipher.encrypt(target.password()));
+            // An empty password on an existing row means "unchanged" — the caller was editing
+            // something else and never held the secret. Re-encrypting here would force every
+            // unrelated edit through the cipher, so a rotated key would break editing a URL.
+            boolean unchanged = target.password().isEmpty() && entity.getDbPassword() != null;
+            if (!unchanged) {
+                entity.setDbPassword(cipher.encrypt(target.password()));
+            }
         }, () -> {
             entity.setDbUrl(null);
             entity.setDbUsername(null);
@@ -61,6 +67,12 @@ class MonitoredServiceJpaAdapter implements MonitoredServiceRepository {
     @Transactional(readOnly = true)
     public Optional<MonitoredService> findByName(ServiceName name) {
         return repository.findById(name.value()).map(entity -> toDomain(entity, true));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<MonitoredService> findByNameForEditing(ServiceName name) {
+        return repository.findById(name.value()).map(entity -> toDomain(entity, false));
     }
 
     @Override
