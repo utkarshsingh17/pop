@@ -1,0 +1,46 @@
+services:
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: pop-postgres
+    environment:
+      POSTGRES_USER: pop
+      POSTGRES_PASSWORD: pop
+      POSTGRES_DB: pop
+    # pg_stat_statements must be preloaded at server start; CREATE EXTENSION alone
+    # is not enough. The slow-query investigator is useless without it.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - pg_stat_statements.max=10000
+    # Deliberately not 5432: a locally installed Postgres binds loopback:5432 more
+    # specifically than Docker's wildcard bind and silently wins, so the app would
+    # connect to the wrong server.
+    ports:
+      - "55432:5432"
+    volumes:
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+      - pop-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pop -d pop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: pop-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=6h
+
+volumes:
+  pop-pgdata:
