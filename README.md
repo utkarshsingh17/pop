@@ -8,7 +8,7 @@ a database and a metrics backend, and it decides what evidence to gather — swe
 latency, sweep the database, spot a sequential scan, pull the execution plan, check the indexes,
 then conclude. The evidence trail is recorded alongside the answer.
 
-Built on Spring Boot 4.1 / Spring AI 2.0 / Java 25, with Claude (`claude-opus-5`) as the reasoning
+Built on Spring Boot 4.1 / Spring AI 2.0 / Java 21, with Claude (`claude-opus-5`) as the reasoning
 engine.
 
 ---
@@ -62,7 +62,7 @@ pop never writes to the system it observes. Index suggestions are proposals for 
 
 ## Running it
 
-Requires Docker, JDK 25, and an Anthropic API key.
+Requires Docker, JDK 21, and an Anthropic API key.
 
 ```bash
 docker compose up -d          # Postgres (+ pg_stat_statements) and Prometheus

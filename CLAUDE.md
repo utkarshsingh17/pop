@@ -10,8 +10,9 @@ Prometheus metrics) and letting the model decide what evidence to gather. Findin
 `Investigation` aggregate as a side effect of the tool calls, so the evidence trail is stored
 alongside the diagnosis.
 
-Spring Boot 4.1 / Spring AI 2.0 / Java 25, Maven, Lombok. Not a git repository. No linter or
-formatter is configured.
+Spring Boot 4.1 / Spring AI 2.0 / Java 21, Maven, Lombok. No linter or formatter is configured.
+Pushed to `github.com/utkarshsingh17/pop`; the demo target service it watches lives in the
+sibling repo `utkarshsingh17/order-service`.
 
 ## Commands
 

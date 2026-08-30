@@ -27,7 +27,7 @@
 		<url/>
 	</scm>
 	<properties>
-		<java.version>25</java.version>
+		<java.version>21</java.version>
 		<spring-ai.version>2.0.1</spring-ai.version>
 	</properties>
 
@@ -148,8 +148,10 @@
 
 	<build>
 		<plugins>
-			<!-- JDK 23+ no longer runs annotation processors discovered on the classpath,
-			     so Lombok must be declared explicitly or it is silently skipped. -->
+			<!-- Declared explicitly rather than relying on classpath discovery: JDK 23+
+			     dropped that, and a processor silently skipped produces missing methods
+			     rather than an error. Harmless on 21, and it keeps a JDK bump from
+			     breaking the build. -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
