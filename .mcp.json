@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "pop-ops": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp",
+      "description": "AI Production Operations Platform — read-only database and metrics investigation tools"
+    }
+  }
+}

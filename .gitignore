@@ -35,3 +35,7 @@ build/
 
 # macOS
 .DS_Store
+
+# stray local artefacts
+dump.rdb
+.claude/settings.local.json
