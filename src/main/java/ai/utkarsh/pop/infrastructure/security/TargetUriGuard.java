@@ -41,8 +41,38 @@ public class TargetUriGuard {
 
     /** @throws IllegalArgumentException if the URL is malformed or the host is not permitted */
     public void requireAllowed(String jdbcUrl) {
-        String host = hostOf(jdbcUrl);
+        vetHost(hostOf(jdbcUrl));
+    }
 
+    /**
+     * Vets an http(s) URL pop will fetch — the actuator endpoint of a registered service.
+     *
+     * <p>This is the sharper edge of the two. A JDBC URL at least has to find something speaking
+     * the Postgres wire protocol; an HTTP GET will happily retrieve whatever is at the address,
+     * which is exactly how cloud instance metadata gets exfiltrated. Same host rules, applied
+     * before any request is made.
+     */
+    public void requireAllowedHttpUrl(String url) {
+        if (url == null) {
+            throw new IllegalArgumentException("actuator URL must not be null");
+        }
+        URI uri;
+        try {
+            uri = URI.create(url);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Malformed actuator URL: " + url);
+        }
+        String scheme = uri.getScheme();
+        if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
+            throw new IllegalArgumentException("actuator URL must be http or https, got: " + url);
+        }
+        if (uri.getHost() == null || uri.getHost().isBlank()) {
+            throw new IllegalArgumentException("actuator URL has no host: " + url);
+        }
+        vetHost(uri.getHost());
+    }
+
+    private void vetHost(String host) {
         if (!allowedHosts.isEmpty() && !allowedHosts.contains(host.toLowerCase(Locale.ROOT))) {
             throw new IllegalArgumentException(
                     "Host '" + host + "' is not in pop.security.allowed-target-hosts");

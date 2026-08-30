@@ -1,5 +1,6 @@
 package ai.utkarsh.pop.infrastructure.web;
 
+import ai.utkarsh.pop.domain.model.ActuatorEndpoint;
 import ai.utkarsh.pop.domain.model.DatabaseTarget;
 import ai.utkarsh.pop.domain.model.MonitoredService;
 import ai.utkarsh.pop.domain.model.ServiceName;
@@ -41,7 +42,8 @@ class MonitoredServiceControllerTest {
 
     private static MonitoredService registered() {
         return MonitoredService.register(ServiceName.of("order-service"), null,
-                new DatabaseTarget("jdbc:postgresql://db:5432/shop", "pop_readonly", ""), NOW);
+                new DatabaseTarget("jdbc:postgresql://db:5432/shop", "pop_readonly", ""),
+                new ActuatorEndpoint("http://localhost:3001"), NOW);
     }
 
     @Test
@@ -80,12 +82,43 @@ class MonitoredServiceControllerTest {
     }
 
     @Test
-    void register_shouldRejectABlankName() throws Exception {
+    void register_shouldAcceptAUrlWithNoName() throws Exception {
+        // The headline case: one field is a complete registration, name derived from host:port.
+        when(manageServices.register(any())).thenReturn(registered());
+
         mockMvc.perform(post("/api/v1/services")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"  ","jdbcUrl":"jdbc:postgresql://db:5432/shop"}
+                                {"url":"http://localhost:3001"}
                                 """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.actuatorUrl").value("http://localhost:3001/actuator"));
+    }
+
+    @Test
+    void register_shouldReject400WhenNeitherNameNorUrlIsGiven() throws Exception {
+        // Name is no longer @NotBlank, because a bare url is a valid registration. The rule that
+        // one of the two must be present lives in the use case, which knows the derivation.
+        when(manageServices.register(any())).thenThrow(new IllegalArgumentException(
+                "Provide either a name or a url — a registration needs at least one of them"));
+
+        mockMvc.perform(post("/api/v1/services")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"jdbcUrl":"jdbc:postgresql://db:5432/shop"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(
+                        org.hamcrest.Matchers.containsString("either a name or a url")));
+    }
+
+    @Test
+    void register_shouldRejectAnOverlongName() throws Exception {
+        mockMvc.perform(post("/api/v1/services")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"%s"}
+                                """.formatted("x".repeat(200))))
                 .andExpect(status().isBadRequest());
     }
 
@@ -165,6 +198,18 @@ class MonitoredServiceControllerTest {
 
         mockMvc.perform(delete("/api/v1/services/ghost"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void probe_shouldDistinguishDisabledFromUnconfigured() throws Exception {
+        when(manageServices.probe(any()))
+                .thenReturn(new ProbeResult(false, "Service 'order-service' is disabled, so sweeps "
+                        + "fall back to the statically configured target."));
+
+        mockMvc.perform(post("/api/v1/services/order-service/probe"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.detail").value(
+                        org.hamcrest.Matchers.containsString("is disabled")));
     }
 
     @Test

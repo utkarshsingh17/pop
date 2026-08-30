@@ -60,6 +60,37 @@ class TargetUriGuardTest {
     }
 
     @Test
+    void shouldRejectLinkLocalActuatorUrls() {
+        // The sharp edge: an HTTP GET retrieves whatever is at the address, which is how cloud
+        // instance metadata gets exfiltrated.
+        assertThatThrownBy(() -> guardWith()
+                .requireAllowedHttpUrl("http://169.254.169.254/latest/meta-data/"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("link-local");
+    }
+
+    @Test
+    void shouldAllowAnOrdinaryActuatorUrl() {
+        assertThatCode(() -> guardWith().requireAllowedHttpUrl("http://localhost:3001/actuator"))
+                .doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"file:///etc/passwd", "gopher://localhost:3001", "ftp://x/y", "localhost:3001"})
+    void shouldRejectNonHttpSchemesForActuator(String url) {
+        assertThatThrownBy(() -> guardWith().requireAllowedHttpUrl(url))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void shouldEnforceTheAllowlistForActuatorUrlsToo() {
+        assertThatThrownBy(() -> guardWith("db.internal")
+                .requireAllowedHttpUrl("http://localhost:3001/actuator"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not in pop.security.allowed-target-hosts");
+    }
+
+    @Test
     void shouldEnforceTheAllowlistWhenOneIsConfigured() {
         TargetUriGuard guard = guardWith("db.internal");
 

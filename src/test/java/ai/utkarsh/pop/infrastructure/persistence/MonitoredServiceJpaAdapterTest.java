@@ -1,5 +1,6 @@
 package ai.utkarsh.pop.infrastructure.persistence;
 
+import ai.utkarsh.pop.domain.model.ActuatorEndpoint;
 import ai.utkarsh.pop.domain.model.DatabaseTarget;
 import ai.utkarsh.pop.domain.model.MonitoredService;
 import ai.utkarsh.pop.domain.model.ServiceName;
@@ -55,6 +56,7 @@ class MonitoredServiceJpaAdapterTest extends AbstractPostgresIntegrationTest {
     private static MonitoredService withDatabase() {
         return MonitoredService.register(NAME, "orders",
                 new DatabaseTarget("jdbc:postgresql://db:5432/shop", "pop_readonly", "hunter2"),
+                new ActuatorEndpoint("http://localhost:3001"),
                 NOW);
     }
 
@@ -118,7 +120,7 @@ class MonitoredServiceJpaAdapterTest extends AbstractPostgresIntegrationTest {
 
     @Test
     void shouldPersistARegistrationWithNoDatabase() {
-        adapter.save(MonitoredService.register(ServiceName.of("metrics-only"), null, null, NOW));
+        adapter.save(MonitoredService.register(ServiceName.of("metrics-only"), null, null, null, NOW));
 
         MonitoredService loaded = adapter.findByName(ServiceName.of("metrics-only")).orElseThrow();
 

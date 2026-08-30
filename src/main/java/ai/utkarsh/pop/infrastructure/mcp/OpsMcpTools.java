@@ -72,6 +72,23 @@ public class OpsMcpTools {
                 () -> toolkit.sweep(FindingSource.PROMETHEUS));
     }
 
+    @McpTool(name = "sweep_runtime",
+            annotations = @McpTool.McpAnnotations(
+                    readOnlyHint = true, destructiveHint = false,
+                    idempotentHint = true, openWorldHint = false),
+            description = "Read a registered service's Spring Boot Actuator directly and report "
+                    + "what is wrong right now: health and failing components, JVM heap and "
+                    + "metaspace, blocked threads, GC pause time, CPU, request latency, connection "
+                    + "pool and file descriptors. Each result carries a suggested next check.")
+    public String sweepRuntime(
+            @McpToolParam(description = "Service to investigate, e.g. 'order-service'", required = true)
+            String service,
+            @McpToolParam(description = "Lookback window in minutes (default 60)", required = false)
+            Integer lookbackMinutes) {
+        return withEphemeralInvestigation(service, lookbackMinutes,
+                () -> toolkit.sweep(FindingSource.ACTUATOR));
+    }
+
     @McpTool(name = "list_tables",
             annotations = @McpTool.McpAnnotations(
                     readOnlyHint = true, destructiveHint = false,

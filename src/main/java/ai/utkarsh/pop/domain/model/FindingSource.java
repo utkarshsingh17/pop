@@ -9,5 +9,12 @@ package ai.utkarsh.pop.domain.model;
 public enum FindingSource {
 
     POSTGRES,
-    PROMETHEUS
+    PROMETHEUS,
+
+    /**
+     * Spring Boot Actuator on the service itself. Distinct from {@link #PROMETHEUS}: actuator is
+     * a point-in-time reading taken directly from the process, whereas Prometheus holds history.
+     * A finding from here says what is true now; one from there says when it changed.
+     */
+    ACTUATOR
 }
