@@ -1,0 +1,98 @@
+spring:
+  application:
+    name: pop
+
+  # Platform's own database — Flyway-managed, read/write.
+  datasource:
+    # Port 55432 matches compose.yaml, which avoids 5432 so a locally installed
+    # Postgres cannot shadow the container.
+    url: ${POP_DB_URL:jdbc:postgresql://localhost:55432/pop}
+    username: ${POP_DB_USER:pop}
+    password: ${POP_DB_PASSWORD:pop}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # Flyway owns the schema
+    properties:
+      hibernate:
+        jdbc.batch_size: 50
+        order_inserts: true
+        order_updates: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  mvc:
+    problemdetails:
+      enabled: true   # RFC 9457 error bodies
+
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+
+  # Declarative HTTP interface clients (Boot 4). The group name must match
+  # @ImportHttpServices(group = "prometheus").
+  http:
+    clients:
+      connect-timeout: 2s
+      read-timeout: 10s
+    serviceclient:
+      prometheus:
+        base-url: ${PROMETHEUS_URL:http://localhost:9090}
+        read-timeout: 15s
+
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      chat:
+        # Override with OPENAI_MODEL without editing this file. Confirm the id against
+        # OpenAI's current model list — names change more often than this config does.
+        model: ${OPENAI_MODEL:gpt-4o}
+        max-tokens: 8192
+        temperature: 0.2   # 2.0 removed the implicit default; diagnosis wants determinism
+    chat:
+      client:
+        observations:
+          log-prompt: false      # PII / query text — keep off outside local debugging
+      observations:
+        log-prompt: false
+        log-completion: false
+        include-error-logging: true
+    mcp:
+      server:
+        name: pop-ops
+        version: 1.0.0
+        type: SYNC
+        protocol: STREAMABLE
+
+# The database under observation. Separate DataSource, read-only credentials,
+# never migrated by pop.
+pop:
+  target-datasource:
+    url: ${TARGET_DB_URL:jdbc:postgresql://localhost:55432/shop}
+    username: ${TARGET_DB_USER:pop_readonly}
+    password: ${TARGET_DB_PASSWORD:pop_readonly}
+    # Hard ceiling applied to every statement the agent runs against the target.
+    statement-timeout: 5s
+    max-rows: 200
+  investigation:
+    default-lookback: 1h
+    # EXPLAIN ANALYZE executes the query. Off unless deliberately enabled.
+    allow-explain-analyze: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    tags:
+      application: pop
+
+logging:
+  level:
+    ai.utkarsh.pop: INFO
